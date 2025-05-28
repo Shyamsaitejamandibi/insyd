@@ -43,7 +43,7 @@ graph LR
     C --> D[Notification Processor]
     D --> E[Database]
     D --> F[Redis Pub/Sub]
-    F --> G[WebSocket Server]
+    F --> G[SSE Stream]
     G --> H[Client]
 ```
 
@@ -55,8 +55,9 @@ graph LR
     B --> C[In-Memory Queue]
     C --> D[Notification Processor]
     D --> E[Database]
-    D --> F[WebSocket Server]
-    F --> G[Client]
+    D --> F[In-Memory Pub/Sub]
+    F --> G[SSE Stream]
+    G --> H[Client]
 ```
 
 ## Implementation Details
@@ -70,8 +71,19 @@ await redis.lPush("notifications", JSON.stringify(notification));
 // Fallback In-Memory Queue
 class InMemoryQueue {
   private queue: any[] = [];
+  private subscribers: Set<(data: any) => void> = new Set();
+
   async lPush(key: string, value: string) {
     this.queue.unshift(JSON.parse(value));
+    this.notifySubscribers();
+  }
+
+  async brPop(key: string, timeout: number) {
+    if (this.queue.length === 0) {
+      return null;
+    }
+    const value = this.queue.pop();
+    return { element: JSON.stringify(value) };
   }
 }
 ```
@@ -82,8 +94,33 @@ class InMemoryQueue {
 // Redis Pub/Sub
 await redis.publish("notification-events", eventData);
 
-// Fallback Direct WebSocket
-websocket.send(JSON.stringify(notification));
+// Fallback In-Memory Pub/Sub
+async publish(channel: string, message: string) {
+  this.notifySubscribers();
+}
+
+subscribe(channel: string, callback: (message: string) => void) {
+  this.subscribers.add(callback);
+  return Promise.resolve();
+}
+```
+
+### 3. Server-Sent Events (SSE)
+
+```typescript
+// SSE Stream Implementation
+const stream = new ReadableStream({
+  async start(controller) {
+    const subscriber = redis.duplicate();
+    await subscriber.connect();
+    await subscriber.subscribe("notification-events", (message: string) => {
+      const notification = JSON.parse(message);
+      if (notification.userId === userId) {
+        controller.enqueue(encoder.encode(`data: ${message}\n\n`));
+      }
+    });
+  },
+});
 ```
 
 ## Why Both Redis and In-Memory?
@@ -132,10 +169,24 @@ websocket.send(JSON.stringify(notification));
 
 ```typescript
 try {
-  await redis.lPush("notifications", JSON.stringify(notification));
+  redisClient = createClient({
+    url: process.env.REDIS_URL || "redis://localhost:6379",
+    socket: {
+      reconnectStrategy: (retries) => {
+        if (retries > 3) {
+          console.warn(
+            "Redis connection failed, falling back to in-memory queue"
+          );
+          redisClient = new InMemoryQueue();
+          return new Error("Max reconnection attempts reached");
+        }
+        return Math.min(retries * 1000, 3000);
+      },
+    },
+  });
 } catch (error) {
-  console.warn("Redis failed, using in-memory queue:", error);
-  inMemoryQueue.lPush("notifications", JSON.stringify(notification));
+  console.warn("Failed to initialize Redis, using in-memory queue:", error);
+  redisClient = new InMemoryQueue();
 }
 ```
 
