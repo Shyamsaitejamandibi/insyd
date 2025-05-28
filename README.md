@@ -49,6 +49,13 @@ cd insyd
 # Install frontend dependencies
 cd frontend
 pnpm install
+
+# Push the database schema
+pnpm dlx prisma db push
+
+# Seed the database
+pnpm dlx prisma db seed
+
 ```
 
 ### 2. Environment Configuration
@@ -56,6 +63,9 @@ pnpm install
 Create a `.env` file in the `frontend` directory:
 
 ```env
+# Database Configuration
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+
 # Redis Configuration
 REDIS_URL="redis://localhost:6379"
 
@@ -66,7 +76,6 @@ REDIS_URL="redis://localhost:6379"
 
 ```bash
 # Start frontend development server
-cd frontend
 pnpm dev
 ```
 
@@ -102,8 +111,7 @@ frontend/
 - **TypeScript** - Type safety
 - **Redis** - Real-time data handling and message broker
 - **Prisma** - Database ORM
-- **Radix UI** - Accessible UI primitives
-- **Sonner** - Toast notifications
+- **Shadcn UI** - Accessible UI primitives
 - **date-fns** - Date manipulation
 
 ## System Design
