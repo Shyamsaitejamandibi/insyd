@@ -11,7 +11,8 @@ export const useWebSocket = (userId: string | null) => {
   useEffect(() => {
     if (!userId) return;
 
-    const websocket = new WebSocket("ws://localhost:3001");
+    const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE || "ws://localhost:3001";
+    const websocket = new WebSocket(WS_BASE);
 
     websocket.onopen = () => {
       console.log("WebSocket connected");
