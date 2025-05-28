@@ -1,0 +1,61 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id        String   @id @default(cuid())
+    name      String
+    email     String   @unique
+    avatar    String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Following relationships
+    following Follow[] @relation("UserFollowing")
+    followers Follow[] @relation("UserFollowers")
+
+    // Notifications
+    notifications Notification[]
+
+    @@map("users")
+}
+
+model Follow {
+    id          String   @id @default(cuid())
+    followerId  String
+    followingId String
+    createdAt   DateTime @default(now())
+
+    follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+    following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+    @@unique([followerId, followingId])
+    @@map("follows")
+}
+
+model Notification {
+    id        String           @id @default(cuid())
+    userId    String
+    type      NotificationType
+    title     String
+    message   String
+    read      Boolean          @default(false)
+    createdAt DateTime         @default(now())
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@map("notifications")
+}
+
+enum NotificationType {
+    FOLLOW
+    UNFOLLOW
+}
