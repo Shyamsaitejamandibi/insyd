@@ -15,14 +15,12 @@ interface User {
 interface UserCardProps {
   user: User;
   currentUserId: string | null;
-  isProcessing: boolean;
   onToggleFollow: (userId: string, isCurrentlyFollowing: boolean) => void;
 }
 
 export const UserCard = ({
   user,
   currentUserId,
-  isProcessing,
   onToggleFollow,
 }: UserCardProps) => {
   return (
@@ -57,21 +55,13 @@ export const UserCard = ({
         {currentUserId && currentUserId !== user.id && (
           <button
             onClick={() => onToggleFollow(user.id, user.isFollowing || false)}
-            disabled={isProcessing}
             className={`flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium transition-all duration-200 ${
-              isProcessing
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : user.isFollowing
+              user.isFollowing
                 ? "bg-red-100 text-red-700 hover:bg-red-200"
                 : "bg-blue-100 text-blue-700 hover:bg-blue-200"
             }`}
           >
-            {isProcessing ? (
-              <>
-                <Clock size={16} className="animate-spin" />
-                Processing...
-              </>
-            ) : user.isFollowing ? (
+            {user.isFollowing ? (
               <>
                 <UserMinus size={16} />
                 Unfollow

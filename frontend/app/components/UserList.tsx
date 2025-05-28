@@ -16,14 +16,12 @@ interface User {
 interface UserListProps {
   users: User[];
   currentUserId: string | null;
-  processingUsers: Set<string>;
   onToggleFollow: (userId: string, isCurrentlyFollowing: boolean) => void;
 }
 
 export const UserList = ({
   users,
   currentUserId,
-  processingUsers,
   onToggleFollow,
 }: UserListProps) => {
   return (
@@ -39,7 +37,6 @@ export const UserList = ({
             key={user.id}
             user={user}
             currentUserId={currentUserId}
-            isProcessing={processingUsers.has(user.id)}
             onToggleFollow={onToggleFollow}
           />
         ))}

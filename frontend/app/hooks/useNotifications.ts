@@ -1,22 +1,20 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001/api";
+const API_BASE = "/api";
 
 interface Notification {
   id: string;
-  type: "FOLLOW" | "UNFOLLOW";
+  type: "FOLLOW" | "UNFOLLOW" | "NEW_FOLLOWER" | "ACTIVITY";
   title: string;
   message: string;
   read: boolean;
   createdAt: string;
+  actorId?: string;
+  actorName?: string;
 }
 
-export const useNotifications = (
-  currentUserId: string | null,
-  ws: WebSocket | null
-) => {
+export const useNotifications = (currentUserId: string | null) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -52,28 +50,50 @@ export const useNotifications = (
     }
   };
 
+  const markAllAsRead = async () => {
+    if (!currentUserId) return;
+
+    try {
+      await axios.patch(
+        `${API_BASE}/users/${currentUserId}/notifications/read-all`
+      );
+
+      // Update local state
+      setNotifications((prev) =>
+        prev.map((notif) => ({ ...notif, read: true }))
+      );
+      setUnreadCount(0);
+
+      // Refresh notifications to ensure sync with server
+      await fetchNotifications();
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+    }
+  };
+
+  // Initial fetch
   useEffect(() => {
     if (currentUserId) {
       fetchNotifications();
     }
   }, [currentUserId]);
 
+  // Poll for new notifications every 10 seconds
   useEffect(() => {
-    if (!ws) return;
+    if (!currentUserId) return;
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    const pollInterval = setInterval(fetchNotifications, 10000);
 
-      if (data.type === "notification") {
-        setNotifications((prev) => [data.data, ...prev]);
-        setUnreadCount((prev) => prev + 1);
-      }
+    return () => {
+      clearInterval(pollInterval);
     };
-  }, [ws]);
+  }, [currentUserId]);
 
   return {
     notifications,
     unreadCount,
     markAsRead,
+    markAllAsRead,
+    refreshNotifications: fetchNotifications,
   };
 };

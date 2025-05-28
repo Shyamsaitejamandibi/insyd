@@ -6,7 +6,6 @@ import { Header } from "./components/Header";
 import { UserList } from "./components/UserList";
 import { NotificationPanel } from "./components/NotificationPanel";
 import { ActionQueuePanel } from "./components/ActionQueuePanel";
-import { useWebSocket } from "./hooks/useWebSocket";
 import { useActionQueue } from "./hooks/useActionQueue";
 import { useNotifications } from "./hooks/useNotifications";
 import { useUsers } from "./hooks/useUsers";
@@ -17,13 +16,10 @@ export default function Home() {
   const [showQueue, setShowQueue] = useState(false);
 
   // Custom hooks
-  const ws = useWebSocket(currentUserId);
   const { users, loading, fetchUsers, updateUserOptimistically } =
     useUsers(currentUserId);
-  const { notifications, unreadCount, markAsRead } = useNotifications(
-    currentUserId,
-    ws
-  );
+  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+    useNotifications(currentUserId);
   const { actionQueue, processingUsers, addToQueue, setProcessingUsers } =
     useActionQueue(currentUserId);
 
@@ -34,16 +30,8 @@ export default function Home() {
   ) => {
     if (!currentUserId) return;
 
-    if (processingUsers.has(userId)) {
-      toast("Action already in progress for this user");
-      return;
-    }
-
     const newFollowState = !isCurrentlyFollowing;
     const actionType = newFollowState ? "FOLLOW" : "UNFOLLOW";
-
-    // Add user to processing state
-    setProcessingUsers((prev) => new Set([...prev, userId]));
 
     // Optimistic UI update
     updateUserOptimistically(userId, newFollowState);
@@ -93,7 +81,6 @@ export default function Home() {
             <UserList
               users={users}
               currentUserId={currentUserId}
-              processingUsers={processingUsers}
               onToggleFollow={toggleFollow}
             />
           </div>
@@ -110,6 +97,7 @@ export default function Home() {
               <NotificationPanel
                 notifications={notifications}
                 onMarkAsRead={markAsRead}
+                onMarkAllAsRead={markAllAsRead}
               />
             )}
           </div>
