@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 
 const API_BASE = "/api";
+const DEBOUNCE_DELAY = 500; // 500ms debounce delay
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000; // 5 seconds between retries
 
 interface QueuedAction {
   id: string;
@@ -20,45 +23,62 @@ export const useActionQueue = (currentUserId: string | null) => {
     new Set()
   );
   const queueProcessorRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  const addToQueue = (
-    action: Omit<QueuedAction, "id" | "timestamp" | "retryCount" | "status">
-  ) => {
-    const existingPendingAction = actionQueue.find(
-      (queuedAction) =>
-        queuedAction.userId === action.userId &&
-        queuedAction.currentUserId === action.currentUserId &&
-        (queuedAction.status === "pending" ||
-          queuedAction.status === "processing")
-    );
+  const addToQueue = useCallback(
+    (
+      action: Omit<QueuedAction, "id" | "timestamp" | "retryCount" | "status">
+    ) => {
+      // Clear any existing debounce timer for this user
+      const existingTimer = debounceTimersRef.current.get(action.userId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
 
-    if (existingPendingAction) {
-      console.log("Duplicate action prevented for user:", action.userId);
-      return existingPendingAction.id;
-    }
+      // Check for existing pending/processing action
+      const existingPendingAction = actionQueue.find(
+        (queuedAction) =>
+          queuedAction.userId === action.userId &&
+          queuedAction.currentUserId === action.currentUserId &&
+          (queuedAction.status === "pending" ||
+            queuedAction.status === "processing")
+      );
 
-    const queuedAction: QueuedAction = {
-      ...action,
-      id: `${action.type}_${action.userId}_${Date.now()}`,
-      timestamp: Date.now(),
-      retryCount: 0,
-      status: "pending",
-    };
+      if (existingPendingAction) {
+        console.log("Duplicate action prevented for user:", action.userId);
+        return existingPendingAction.id;
+      }
 
-    setActionQueue((prev) => [...prev, queuedAction]);
-    return queuedAction.id;
-  };
+      // Set new debounce timer
+      const timer = setTimeout(() => {
+        const queuedAction: QueuedAction = {
+          ...action,
+          id: `${action.type}_${action.userId}_${Date.now()}`,
+          timestamp: Date.now(),
+          retryCount: 0,
+          status: "pending",
+        };
 
-  const updateQueueItemStatus = (
-    id: string,
-    status: QueuedAction["status"]
-  ) => {
-    setActionQueue((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status } : item))
-    );
-  };
+        setActionQueue((prev) => [...prev, queuedAction]);
+        debounceTimersRef.current.delete(action.userId);
+      }, DEBOUNCE_DELAY);
 
-  const processQueue = async () => {
+      debounceTimersRef.current.set(action.userId, timer);
+      return null; // Return null since the action is debounced
+    },
+    [actionQueue]
+  );
+
+  const updateQueueItemStatus = useCallback(
+    (id: string, status: QueuedAction["status"]) => {
+      setActionQueue((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status } : item))
+      );
+    },
+    []
+  );
+
+  const processQueue = useCallback(async () => {
     const pendingActions = actionQueue.filter(
       (action) => action.status === "pending"
     );
@@ -67,36 +87,29 @@ export const useActionQueue = (currentUserId: string | null) => {
 
     const action = pendingActions[0];
 
+    // Skip if user is already being processed
+    if (processingUsers.has(action.userId)) {
+      return;
+    }
+
     try {
+      setProcessingUsers((prev) => new Set(prev).add(action.userId));
       updateQueueItemStatus(action.id, "processing");
+
+      const endpoint = `${API_BASE}/users/${action.userId}/follow`;
 
       let response;
       if (action.type === "FOLLOW") {
-        response = await axios.post(
-          `${API_BASE}/users/${action.userId}/follow`,
-          {
-            followerId: action.currentUserId,
-          }
-        );
+        response = await axios.post(endpoint, {
+          followerId: action.currentUserId,
+        });
       } else {
-        response = await axios.delete(
-          `${API_BASE}/users/${action.userId}/follow`,
-          {
-            data: { followerId: action.currentUserId },
-          }
-        );
+        response = await axios.delete(endpoint, {
+          data: { followerId: action.currentUserId },
+        });
       }
 
       updateQueueItemStatus(action.id, "success");
-
-      // Remove user from processing state
-      setProcessingUsers((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(action.userId);
-        return newSet;
-      });
-
-      // Show success toast
       toast(`Successfully ${action.type.toLowerCase()}ed user`);
     } catch (error: any) {
       console.error(`Error processing ${action.type} action:`, error);
@@ -125,7 +138,7 @@ export const useActionQueue = (currentUserId: string | null) => {
 
         toast(`Failed to ${action.type.toLowerCase()} user. Will retry...`);
       }
-
+    } finally {
       setProcessingUsers((prev) => {
         const newSet = new Set(prev);
         newSet.delete(action.userId);
@@ -139,14 +152,12 @@ export const useActionQueue = (currentUserId: string | null) => {
         prev.filter((action) => action.status !== "success")
       );
     }, 3000);
-  };
+  }, [actionQueue, processingUsers, updateQueueItemStatus]);
 
   // Start queue processor
   useEffect(() => {
     if (actionQueue.length > 0 && !queueProcessorRef.current) {
-      queueProcessorRef.current = setInterval(() => {
-        processQueue();
-      }, 1000);
+      queueProcessorRef.current = setInterval(processQueue, 1000);
     } else if (actionQueue.length === 0 && queueProcessorRef.current) {
       clearInterval(queueProcessorRef.current);
       queueProcessorRef.current = null;
@@ -158,29 +169,37 @@ export const useActionQueue = (currentUserId: string | null) => {
         queueProcessorRef.current = null;
       }
     };
-  }, [actionQueue.length]);
+  }, [actionQueue.length, processQueue]);
 
   // Auto-retry failed actions
   useEffect(() => {
     const failedActions = actionQueue.filter(
-      (action) => action.status === "failed" && action.retryCount < 3
+      (action) => action.status === "failed" && action.retryCount < MAX_RETRIES
     );
 
     if (failedActions.length > 0) {
       const retryTimer = setTimeout(() => {
         setActionQueue((prev) =>
           prev.map((action) => {
-            if (action.status === "failed" && action.retryCount < 3) {
+            if (action.status === "failed" && action.retryCount < MAX_RETRIES) {
               return { ...action, status: "pending" };
             }
             return action;
           })
         );
-      }, 5000);
+      }, RETRY_DELAY);
 
       return () => clearTimeout(retryTimer);
     }
   }, [actionQueue]);
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      debounceTimersRef.current.forEach((timer) => clearTimeout(timer));
+      debounceTimersRef.current.clear();
+    };
+  }, []);
 
   return {
     actionQueue,

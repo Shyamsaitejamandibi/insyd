@@ -16,12 +16,10 @@ export default function Home() {
   const [showQueue, setShowQueue] = useState(false);
 
   // Custom hooks
-  const { users, loading, fetchUsers, updateUserOptimistically } =
-    useUsers(currentUserId);
+  const { users, loading, updateUserOptimistically } = useUsers(currentUserId);
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useNotifications(currentUserId);
-  const { actionQueue, processingUsers, addToQueue, setProcessingUsers } =
-    useActionQueue(currentUserId);
+  const { actionQueue, addToQueue } = useActionQueue(currentUserId);
 
   // Toggle follow/unfollow
   const toggleFollow = async (
@@ -36,8 +34,8 @@ export default function Home() {
     // Optimistic UI update
     updateUserOptimistically(userId, newFollowState);
 
-    // Add to queue
-    const queueId = addToQueue({
+    // Add to queue (will be debounced)
+    addToQueue({
       type: actionType,
       userId,
       currentUserId,
@@ -45,7 +43,7 @@ export default function Home() {
 
     // Show immediate feedback
     const user = users.find((u) => u.id === userId);
-    if (user && queueId) {
+    if (user) {
       toast(
         `${actionType === "FOLLOW" ? "Following" : "Unfollowing"} ${
           user.name

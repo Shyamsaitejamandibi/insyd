@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { redis } from "@/lib/redis";
 
 const prisma = new PrismaClient();
 
@@ -9,6 +10,12 @@ async function createNotification(
   follower: { id: string; name: string }
 ) {
   try {
+    // Log which queue system is being used
+    console.log(
+      "Using queue system:",
+      redis.constructor.name === "InMemoryQueue" ? "In-Memory" : "Redis"
+    );
+
     // Create notification in database
     const notification = await prisma.notification.create({
       data: {
