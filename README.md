@@ -24,7 +24,7 @@ This POC is designed for a bootstrapped startup with 100 DAUs in mind, with a fo
 ## Features
 
 ✅ **Real-time Notifications**: Redis-powered instant updates with in-memory fallback  
-✅ **Scalable Architecture**: Designed to scale from 100 DAUs to 1M+ DAUs  
+✅ **Scalable Architecture**: Designed to scale from 100 DAUs can scale to 1M+ DAUs with Redis Cluster
 ✅ **Type Safety**: Full TypeScript implementation  
 ✅ **Modern Stack**: Next.js, React, Redis  
 ✅ **Toast Notifications**: Using Sonner for beautiful notifications  
@@ -44,10 +44,7 @@ This POC is designed for a bootstrapped startup with 100 DAUs in mind, with a fo
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd insyd
-
-# Install frontend dependencies
-cd frontend
+cd insyd/frontend
 pnpm install
 
 # Push the database schema
@@ -107,10 +104,10 @@ frontend/
 ### Frontend
 
 - **Next.js** - React framework with App Router
-- **React** - UI library
 - **TypeScript** - Type safety
 - **Redis** - Real-time data handling and message broker
 - **Prisma** - Database ORM
+- **PostgreSQL** - Database
 - **Shadcn UI** - Accessible UI primitives
 - **date-fns** - Date manipulation
 
